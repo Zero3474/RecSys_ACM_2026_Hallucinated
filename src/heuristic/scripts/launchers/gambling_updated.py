@@ -333,9 +333,7 @@ def parse_args() -> argparse.Namespace:
                              "0 = off. Implies the endorsed/rejected partition (auto-enables "
                              "the progress join). Fires only on rows with >=1 rejected prior.")
     parser.add_argument("--release-date-weight", type=float, default=1.0,
-                        help="re-ranking weight applied to pool tracks that have NO release_date "
-                             "no-release-date tracks toward the top. 1.0 = off (identity). The "
-                             "boost is additive, scaled to the per-row score spread.")
+                        help="re-ranking weight applied to pool tracks that have NO release_date ")
     parser.add_argument("--w-rel-artist", type=float, default=0.0,
                         help="relation scorer: bonus for candidates sharing ARTIST with a prior "
                              "track. Discriminates among dateless tracks. 0 = off. Additive, "
@@ -1164,8 +1162,7 @@ def main() -> None:
             _rd_by_id[str(_r.get("track_id"))] = bool(_empty)
         _no_rd_mask = _np_rd.array(
             [_rd_by_id.get(str(tid), True) for tid in track_index.track_ids], dtype=bool)
-        print(f"  release-date-weight={args.release_date_weight}: "
-              f"{int(_no_rd_mask.sum())}/{len(_no_rd_mask)} pool tracks have NO release_date")
+
 
     # relation-scorer features (registrant / rare-tags) aligned to track_index.track_ids
     _track_registrant = None

@@ -766,8 +766,7 @@ def generate_heuristic_with_qwen_fallback(
                 else:
                     spread = 1.0
                 scores = scores + np.where(nd, (release_date_weight - 1.0) * spread, 0.0)
-                stats["release_date_weight_applied_rows"] = stats.get(
-                    "release_date_weight_applied_rows", 0) + 1
+
 
         order = np.argsort(-scores)
         sel_order = order[:top_k]
