@@ -53,3 +53,8 @@ Check readme at `src/resp_blind_b/README.md`
 ```bash
 uv run merge_submission.py -p path/to/prediction.json -r path/to/response.json
 ```
+
+For example:
+```bash
+uv run merge_submission.py -p heuristic/LAST.json -r ../data/blind_b_responses/final_pipeline/responses.json
+```
