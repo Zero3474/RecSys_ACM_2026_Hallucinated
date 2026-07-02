@@ -14,7 +14,7 @@ cd src/reranker_oof
 uv run python -m launchers_overfit_blind_b.s03_assemble_dataset --config configs/blind_no_filter/dataset.yaml
 ```
 
-To disable the test_tracks filtering just put to `false` the follwing in `src/reranker_oof/configs/blind_no_filter/dataset.yaml`:
+To disable the test_tracks filtering just put to `false` the following in `src/reranker_oof/configs/blind_no_filter/dataset.yaml`:
 ```yaml
 test_tracks:
   enabled: false
@@ -27,10 +27,10 @@ test_tracks:
 ```bash
 uv run python -u -m launchers_overfit_blind_b.s06_retrain_submit --config configs/blind_no_filter/xgb_v5.yaml
 ```
-Note: The optuna database is required at `models/reranker_oof/optuna/blind_b/v5_drop_fusionfamily_blind_last/xgb_v5_drop_fusionfamily_blind_last_blind_b_last_onblind.db`
+Note: The optuna database is required at `models/reranker_oof/optuna/blind_b/no_filter_v5`
 
 **Find your outputs:**
-You can find your outputs in the `models/reranker_oof/blind_b_retrain/v5_drop_fusionfamily_blind_last/` folder.
+You can find your outputs in the `models/reranker_oof/blind_b_retrain/no_filter_v5/v2_blind_last/` folder.
 
 
 ## COMPLETE TUNING PIPELINE
