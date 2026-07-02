@@ -1,11 +1,10 @@
 # Regenerate CG datasets for the reranker (inference)
 
-Reproduce the per-CG candidate parquets that the `blind_v13` reranker consumes,
+Reproduce the per-CG candidate parquets that the reranker consumes,
 from the delivered **Optuna DBs** + **best_params YAMLs**. No re-tuning — each CG
 reloads frozen params and re-runs inference across every split.
 
-Output goes to `models/CG_crossvalidation/<cg>/datasets/`. Files ↔ reranker
-`blind_v13/dataset.yaml` mapping:
+Output goes to `models/CG_crossvalidation/<cg>/datasets/`
 
 | dataset.yaml split | filename |
 |---|---|
