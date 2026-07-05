@@ -33,7 +33,7 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model <MODEL_KEY> --urm_mode session \
     --config configs/<YAML> \
     --objective <ndcg|recall> --objective_k <20|200> \
-    --storage_dir models/retrain --top_k 500
+    --storage_dir models/CG_crossvalidation --top_k 500
 ```
 
 ### Model → config → objective
@@ -67,7 +67,7 @@ the Blind-B set with `--predict_blindB`.
 ```bash
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model <MODEL_KEY> --urm_mode session --config configs/<YAML> \
-    --objective <ndcg|recall> --objective_k <20|200> --storage_dir models/retrain \
+    --objective <ndcg|recall> --objective_k <20|200> --storage_dir models/CG_crossvalidation \
     --predict_blindB --blindB_path <blind_b_parquet> --blindB_query_split <split>
 ```
 
