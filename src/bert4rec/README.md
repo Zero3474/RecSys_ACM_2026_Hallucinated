@@ -59,6 +59,15 @@ Under `--storage_dir`/`<MODEL_KEY>_session/`:
 
 Add `--skip_datasets --skip_holdout_candidates` to write only these.
 
+## Remainder
+After having generated all the parquets, rember to align turn numbers by doing in the correct root:
+
+```bash
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+        --path models/CG_crossvalidation/<model>/datasets \
+        --apply --drop_fallback_used --apply
+```
+
 ## Blind-B
 
 No retraining required: reuse the trained `full.pkl` and run inference only on
