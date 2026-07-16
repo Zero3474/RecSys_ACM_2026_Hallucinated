@@ -43,7 +43,16 @@ repo_root/
 ```
 
 * **Dataset:** Place the Blind B parquet file at `data/talkpl-ai/TalkPlayData-Challenge-Blind-B/data/test-00000-of-00001.parquet`.
-* **Models:** Place the required GGUF model files in the `models` directory at `models/gemma-4-26B-A4B-it-Q8_0.gguf`.
+
+* **Models:** Place the required GGUF model file in the `models` directory at `models/gemma-4-26B-A4B-it-Q8_0.gguf`.
+
+```bash
+hf download unsloth/gemma-4-26B-A4B-it-GGUF gemma-4-26B-A4B-it-Q8_0.gguf --revision b19ae878a3d8d38352d69c370321f94ff98023a0
+
+```
+
+
+*SHA256 Checksum:* `b26c56ea4bf724b4efa0161bb4615e974847ec64450a4dd49da8712614a128c7`
 
 ## Pipeline Architecture
 
@@ -68,22 +77,14 @@ The core execution is orchestrated by `final_pipeline.py` and is broken down int
 
 | Directory / File | Purpose |
 | --- | --- |
-| **`config/`** | Contains YAML configuration files, including `models.yaml` (local model paths/parameters) and `pipeline.yaml` (generation constraints).
-|
-| **`prompts/`** | Stores the raw `.txt` system prompts used across different pipeline stages (e.g., `baseline.txt`, `compress_v14.txt`).
-|
-| **`src/`** | Core logic modules handling specific tasks like `summary.py` (context extraction) and `diversity.py`.
-|
-| **`src/utils/`** | Helper scripts including `config.py` (CLI parsing), `resources.py` (path/template management), and `bigrams.py` (repetition tracking).
-|
-| **`templates/`** | Holds the Jinja2 templates used to dynamically format complex prompts (like the bigram removal prompt).
-|
-| **`final_pipeline.py`** | The main entry point script that orchestrates the multi-stage generation and JSONL checkpointing.
-|
-| **`generate_viewer.py`** | A utility script to build an interactive HTML page for manual inspection of all pipeline stages.
-|
-| **`pipeline.html`** / **`viewer.html`** | HTML files providing visual descriptions of the pipeline and interactive views of the generated responses.
-|
+| **`config/`** | Contains YAML configuration files, including `models.yaml` (local model paths/parameters) and `pipeline.yaml` (generation constraints). |
+| **`prompts/`** | Stores the raw `.txt` system prompts used across different pipeline stages (e.g., `baseline.txt`, `compress_v14.txt`). |
+| **`src/`** | Core logic modules handling specific tasks like `summary.py` (context extraction) and `diversity.py`. |
+| **`src/utils/`** | Helper scripts including `config.py` (CLI parsing), `resources.py` (path/template management), and `bigrams.py` (repetition tracking). |
+| **`templates/`** | Holds the Jinja2 templates used to dynamically format complex prompts (like the bigram removal prompt). |
+| **`final_pipeline.py`** | The main entry point script that orchestrates the multi-stage generation and JSONL checkpointing. |
+| **`generate_viewer.py`** | A utility script to build an interactive HTML page for manual inspection of all pipeline stages. |
+| **`pipeline.html`** / **`viewer.html`** | HTML files providing visual descriptions of the pipeline and interactive views of the generated responses. |
 | **`pyproject.toml`** | Defines the project environment, dependencies (like `uv`), and Python version requirements. |
 
 ---
@@ -108,20 +109,26 @@ The pipeline relies on YAML files to govern generation quality and structural co
 
 By default, the execution pipeline is configured to run entirely using a single local model to maintain consistency across the generation, compression, and refinement steps.
 
-* **Primary Model:** `gemma-26B`
+* **Primary Model:** `gemma-4-26B-A4B-it` (Hugging Face Repository: `unsloth/gemma-4-26B-A4B-it-GGUF`)
+
 
 * **Format:** GGUF quantized to **8-bit** (`Q8_0`) for optimized local inference.
 
 
 * **Context Window:** Configured at `4096` tokens.
 
-
-
-The pipeline dynamically maps this setup by pulling parameters from `models.yaml`. If you need to switch configurations or override parameters at runtime (for example, testing with `qwen-27B` or `deepseek-70B_5bit`), you can use the `--model_name` flag via `config.py`:
+The pipeline dynamically maps this setup by pulling parameters from `models.yaml`. If you need to switch configurations or override parameters at runtime (for example, testing with `qwen-27B` or `deepseek-70B_5bit`), you can use the `--model_name` flag to specify a different model. If you want to add additional parameter to the initialization of llama.cpp, you can do so by adding a them `-a model.<parameter>=<value>` to the command line. For example, to set the context window to 8192 tokens, you would run:
 
 ```bash
-python final_pipeline.py --name "my_run" --model_name "gemma-26B"
+python final_pipeline.py --name "my_run" --model_name "gemma-26B" -a model.context_window=8192
+```
 
+---
+
+## Execution 
+
+```bash
+python final_pipeline.py --name "final_pipeline" --model_name "gemma-26B"
 ```
 
 ---
