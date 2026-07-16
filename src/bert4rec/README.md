@@ -63,6 +63,7 @@ Add `--skip_datasets --skip_holdout_candidates` to write only these.
 After having generated all the parquets, rember to align turn numbers by doing in the correct root:
 
 ```bash
+cd src/basic_candidate_generators # From the root of the repository
 uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
         --path models/CG_crossvalidation/<model>/datasets \
         --apply --drop_fallback_used --apply
