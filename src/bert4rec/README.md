@@ -28,7 +28,7 @@ src/basic_candidate_generators/
 From inside the package, one model at a time, passing its config via `--config`:
 
 ```bash
-cd src/basic_candidate_generators
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model <MODEL_KEY> --urm_mode session \
     --config configs/<YAML> \
@@ -50,6 +50,8 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 `--model` must match the `model:` field inside the config (it sets the output
 folder `<MODEL_KEY>_session/`); `class` and `module` are read from the config.
 
+Also rename, if needed, the folders of the model trained with objective `ndcg` to `<MODEL_KEY>_session_ndcg/` and the one trained with objective `recall` to `<MODEL_KEY>_session/` for clarity.
+
 ## Output
 
 Under `--storage_dir`/`<MODEL_KEY>_session/`:
@@ -60,7 +62,7 @@ Under `--storage_dir`/`<MODEL_KEY>_session/`:
 Add `--skip_datasets --skip_holdout_candidates` to write only these.
 
 ## Remainder
-After having generated all the parquets, rember to align turn numbers by doing in the correct root:
+After having generated all the parquets, remeber to align turn numbers by doing in the correct root:
 
 ```bash
 cd src/basic_candidate_generators # From the root of the repository
@@ -68,6 +70,27 @@ uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
         --path models/CG_crossvalidation/<model>/datasets \
         --apply --drop_fallback_used --apply
 ```
+
+## In case of missing `blind_a_all_turns_candidates.parquet`
+
+If after a retrain `s03_assemble_dataset` (in `src/reranker_oof`) complains that
+a CG's `blind_a_all_turns_candidates.parquet` is missing, it just means
+`assemble_blind_a.py` hasn't been (re-)run for that CG yet since the retrain —
+the history-turn (`fold_*_oof_{cg_val,reranker_val}.parquet`) and submission-turn
+(`blind_candidates.parquet`) parquets it unions already exist from the retrain
+above. Fix by running, from the root of the repository:
+
+```bash
+cd src/basic_candidate_generators
+uv run python -m launchers_crossvalidation.assemble_blind_a --only <model>_session # If trained to optimize recall
+```
+or
+```bash
+uv run python -m launchers_crossvalidation.assemble_blind_a --only <model>_session_ndcg # If trained to optimize ndcg
+```
+
+Omit `--only` to (re-)assemble it for every CG under `--cg-store` (default
+`models/CG_crossvalidation`).
 
 ## Blind-B
 
