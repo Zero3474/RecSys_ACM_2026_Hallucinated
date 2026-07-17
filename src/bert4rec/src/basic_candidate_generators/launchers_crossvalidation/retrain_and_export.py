@@ -112,6 +112,19 @@ def parse_args() -> argparse.Namespace:
                         "and regenerate datasets/holdout_candidates.parquet from it "
                         "(with the same holdout score report as a full run). "
                         "Combinable with --refresh_fold_datasets.")
+    p.add_argument("--refresh_blind_candidates", action="store_true",
+                   help="INFERENCE-ONLY: skip all training, reload checkpoints/full.pkl "
+                        "and regenerate datasets/blind_candidates.parquet (Blind-A, "
+                        "submission-turn) from it, plus submission/blind_A_<folder>.json "
+                        "unless --skip_blind_candidates/--skip_submission. "
+                        "Combinable with --refresh_fold_datasets and "
+                        "--refresh_holdout_candidates.")
+    p.add_argument("--folder_suffix", default=None,
+                   help="Override the output folder suffix appended after "
+                        "'<model>_<urm_mode>'. Default: '_ndcg' when "
+                        "--objective ndcg, empty otherwise (matches the "
+                        "reranker's <model>_session / <model>_session_ndcg "
+                        "convention). Pass '' to force no suffix.")
     return p.parse_args()
 
 _OBJECTIVE_DEFAULT_K = {"ndcg": 20, "recall": 200}
@@ -355,6 +368,53 @@ def _refresh_holdout_candidates(
     print(f"\n[refresh] done: {hc_path}")
 
 
+def _refresh_blind_candidates(
+    model_name: str, class_name: str, module_name: str, best_params: dict, urm_mode: str,
+    inference_mode: str, out_dir: Path, folder_key: str, args: argparse.Namespace,
+) -> None:
+    ds_dir   = out_dir / "datasets"
+    ckpt_dir = out_dir / "checkpoints"
+    ds_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{'='*60}")
+    print(f"[refresh] blind-A candidates from full.pkl")
+    print(f"[refresh] model:     {model_name}")
+    print(f"[refresh] out_dir:   {out_dir}")
+    print(f"[refresh] inference: {inference_mode}")
+    print(f"[refresh] top_k:     {args.top_k}")
+
+    rec_full = _load_ckpt(ckpt_dir / "full.pkl", class_name, module_name,
+                          best_params, urm_mode)
+
+    print("Loading blind set...")
+    blind_df = pl.read_parquet(repo_path(_BLIND_PATH))
+    print(f"  {blind_df.shape[0]} sessions")
+    if hasattr(rec_full, "encode_additional"):
+        rec_full.encode_additional(blind_df)
+    _pred_fn = _predict_sessions_text if inference_mode == "text" else _predict_sessions
+
+    blind_k = args.top_k if not args.skip_blind_candidates else 20
+    print(f"Predicting blind-A (top_k={blind_k})...")
+    recs = _pred_fn(rec_full, blind_df, top_k=blind_k, remove_seen=True)
+
+    if not args.skip_blind_candidates:
+        bc_path = ds_dir / "blind_candidates.parquet"
+        recs.with_columns(
+            pl.lit(None, dtype=pl.Utf8).alias("gt_track_id")
+        ).write_parquet(bc_path)
+        print(f"  [blind candidates] {recs.shape[0]} sessions → {bc_path.name}")
+
+    if not args.skip_submission:
+        results = _recs_to_submission(recs, 20)
+        sub_path = out_dir / "submission" / f"blind_A_{folder_key}.json"
+        sub_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(sub_path, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"  [submission] {len(results)} sessions → {sub_path}")
+
+    print(f"\n[refresh] done — {ds_dir}")
+
+
 def _export_blindB(
     model_name: str, class_name: str, module_name: str, best_params: dict, urm_mode: str,
     inference_mode: str, out_dir: Path, folder_key: str, args: argparse.Namespace,
@@ -493,7 +553,12 @@ def _export_one(
           f"{best_params.get('eval_recall_k') if args.objective=='recall' else best_params.get('eval_ndcg_k')}"
           f"  turns>={best_params['eval_min_turn']}  patience={best_params.get('early_stop_patience','default')}")
     inference_mode = cfg.get("inference_mode", "standard")
-    folder_key     = folder_key if folder_key is not None else f"{model_name}_{urm_mode}"
+    if folder_key is None:
+        folder_key = f"{model_name}_{urm_mode}"
+        suffix = args.folder_suffix
+        if suffix is None:
+            suffix = "_ndcg" if args.objective == "ndcg" else ""
+        folder_key += suffix
 
     out_dir    = repo_path(args.storage_dir) / folder_key
 
@@ -502,13 +567,17 @@ def _export_one(
                        inference_mode, out_dir, folder_key, args)
         return
 
-    if args.refresh_fold_datasets or args.refresh_holdout_candidates:
+    if (args.refresh_fold_datasets or args.refresh_holdout_candidates
+            or args.refresh_blind_candidates):
         if args.refresh_fold_datasets:
             _refresh_fold_datasets(class_name, module_name, best_params, urm_mode,
                                    inference_mode, out_dir, args)
         if args.refresh_holdout_candidates:
             _refresh_holdout_candidates(class_name, module_name, best_params, urm_mode,
                                         inference_mode, out_dir, args)
+        if args.refresh_blind_candidates:
+            _refresh_blind_candidates(model_name, class_name, module_name, best_params, urm_mode,
+                                      inference_mode, out_dir, folder_key, args)
         return
 
     splitk_dir = repo_path(args.splitk_dir)
