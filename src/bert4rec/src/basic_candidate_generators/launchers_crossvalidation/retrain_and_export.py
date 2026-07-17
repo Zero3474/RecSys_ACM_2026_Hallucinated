@@ -98,6 +98,20 @@ def parse_args() -> argparse.Namespace:
                    help="Abort blind-B export if query coverage of the target turns "
                         "falls below this (guards the silent no-query degradation). "
                         "Only used with --predict_blindB; ignored for non-query models.")
+
+    p.add_argument("--refresh_fold_datasets", action="store_true",
+                   help="INFERENCE-ONLY: skip all training, reload the per-fold "
+                        "checkpoints (fold_{k}_cg_train.pkl and "
+                        "fold_{k}_cg_train_val.pkl) and regenerate the OOF parquets "
+                        "(fold_{k}_oof_cg_val.parquet and "
+                        "fold_{k}_oof_reranker_val.parquet) from them. Use to "
+                        "re-export the fold candidates (e.g. at a different --top_k) "
+                        "without refitting.")
+    p.add_argument("--refresh_holdout_candidates", action="store_true",
+                   help="INFERENCE-ONLY: skip all training, reload non_holdout.pkl "
+                        "and regenerate datasets/holdout_candidates.parquet from it "
+                        "(with the same holdout score report as a full run). "
+                        "Combinable with --refresh_fold_datasets.")
     return p.parse_args()
 
 _OBJECTIVE_DEFAULT_K = {"ndcg": 20, "recall": 200}
@@ -257,6 +271,90 @@ def _score_holdout(recs_path: Path, train_df: pl.DataFrame, min_turn: int) -> No
     _report("cold-GT", recs_t.filter(~is_warm))
     print(format_by_turn(score_by_turn(recs_t, recall_ks=[20, 200], ndcg_ks=[20])))
 
+def _load_ckpt(ckpt_path: Path, class_name: str, module_name: str,
+               params: dict, urm_mode: str):
+    if not ckpt_path.is_absolute():
+        ckpt_path = repo_path(str(ckpt_path))
+    if not ckpt_path.exists():
+        sys.exit(f"[refresh] checkpoint not found: {ckpt_path}\n"
+                 f"        Run the retrain first (it writes the fold checkpoints).")
+    print(f"  [load] {ckpt_path.name}")
+    with open(ckpt_path, "rb") as f:
+        state = pickle.load(f)
+    rec = instantiate_rec(class_name, module_name, params,
+                          state.get("urm_mode", urm_mode))
+    rec._set_model_state(state)
+    return rec
+
+
+def _refresh_fold_datasets(
+    class_name: str, module_name: str, best_params: dict, urm_mode: str,
+    inference_mode: str, out_dir: Path, args: argparse.Namespace,
+) -> None:
+    splitk_dir = repo_path(args.splitk_dir)
+    ds_dir   = out_dir / "datasets"
+    ckpt_dir = out_dir / "checkpoints"
+    ds_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{'='*60}")
+    print(f"[refresh] out_dir:   {out_dir}")
+    print(f"[refresh] inference: {inference_mode}")
+    print(f"[refresh] top_k:     {args.top_k}  n_folds={args.n_folds}")
+
+    for fold in range(args.n_folds):
+        print(f"\n--- fold {fold} (from checkpoints) ---")
+        for ckpt_name, eval_loader, out_name, label in (
+            (f"fold_{fold}_cg_train.pkl", load_eval,
+             f"fold_{fold}_oof_cg_val.parquet",
+             f"fold_{fold}_cg_train→cg_val"),
+            (f"fold_{fold}_cg_train_val.pkl", load_reranker_val,
+             f"fold_{fold}_oof_reranker_val.parquet",
+             f"fold_{fold}_cg_train_val→reranker_val"),
+        ):
+            rec = _load_ckpt(ckpt_dir / ckpt_name, class_name, module_name,
+                             best_params, urm_mode)
+            eval_df = eval_loader(splitk_dir, fold)
+            _infer_multiturn(rec, eval_df, args.top_k, inference_mode, None,
+                             ds_dir / out_name, label)
+
+    print(f"\n[refresh] done — {ds_dir}")
+
+
+def _refresh_holdout_candidates(
+    class_name: str, module_name: str, best_params: dict, urm_mode: str,
+    inference_mode: str, out_dir: Path, args: argparse.Namespace,
+) -> None:
+    splitk_dir = repo_path(args.splitk_dir)
+    ds_dir   = out_dir / "datasets"
+    ckpt_dir = out_dir / "checkpoints"
+    ds_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{'='*60}")
+    print(f"[refresh] holdout candidates from non_holdout.pkl")
+    print(f"[refresh] out_dir:   {out_dir}")
+    print(f"[refresh] inference: {inference_mode}")
+    print(f"[refresh] top_k:     {args.top_k}")
+
+    rec = _load_ckpt(ckpt_dir / "non_holdout.pkl", class_name, module_name,
+                     best_params, urm_mode)
+
+    holdout_path = splitk_dir / "holdout_test.parquet"
+    if not holdout_path.exists():
+        holdout_path = repo_path(_HOLDOUT_PATH)
+    holdout_df = pl.read_parquet(holdout_path)
+    print(f"[refresh] holdout:   {holdout_path}  ({holdout_df.shape[0]} rows)")
+
+    hc_path = ds_dir / "holdout_candidates.parquet"
+    _infer_multiturn(rec, holdout_df, args.top_k, inference_mode, None,
+                     hc_path, "non_holdout->holdout")
+
+    non_holdout = load_fold(splitk_dir, 0,
+                            parts=["cg_train", "cg_val", "reranker_val"])
+    _score_holdout(hc_path, non_holdout, min_turn=best_params.get("eval_min_turn", 2))
+
+    print(f"\n[refresh] done: {hc_path}")
+
+
 def _export_blindB(
     model_name: str, class_name: str, module_name: str, best_params: dict, urm_mode: str,
     inference_mode: str, out_dir: Path, folder_key: str, args: argparse.Namespace,
@@ -402,6 +500,15 @@ def _export_one(
     if args.predict_blindB:
         _export_blindB(model_name, class_name, module_name, best_params, urm_mode,
                        inference_mode, out_dir, folder_key, args)
+        return
+
+    if args.refresh_fold_datasets or args.refresh_holdout_candidates:
+        if args.refresh_fold_datasets:
+            _refresh_fold_datasets(class_name, module_name, best_params, urm_mode,
+                                   inference_mode, out_dir, args)
+        if args.refresh_holdout_candidates:
+            _refresh_holdout_candidates(class_name, module_name, best_params, urm_mode,
+                                        inference_mode, out_dir, args)
         return
 
     splitk_dir = repo_path(args.splitk_dir)
