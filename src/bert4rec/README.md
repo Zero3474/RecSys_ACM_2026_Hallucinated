@@ -46,8 +46,7 @@ below.
 
 `--model` must match the `model:` field inside the config; `class` and
 `module` are read from the config. The output folder is `<MODEL_KEY>_session/`
-with `_ndcg` **auto-appended** when `--objective ndcg` (no more manual
-renaming — pass `--folder_suffix ''` to force the bare name, or any other
+with `_ndcg` **auto-appended** when `--objective ndcg` (pass `--folder_suffix ''` to force the bare name, or any other
 string to override).
 
 ### Step 1 — retrain + export
@@ -105,7 +104,7 @@ on the Blind-B set.
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model <MODEL_KEY> --urm_mode session --config configs/<YAML> \
-    --objective <OBJECTIVE> --objective_k <OBJECTIVE_K> --storage_dir models/CG_crossvalidation \
+    --objective <OBJECTIVE> --objective_k <OBJECTIVE_K> --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB --blindB_path <blind_b_parquet> --blindB_query_split <split>
 ```
 
@@ -153,12 +152,18 @@ through `fix_dataset_columns`.
 
 Checkpoint-only re-export of everything `src/reranker_oof`'s `dataset.yaml`
 needs, for all 6 `feature_bert4rec` CGs, assuming `checkpoints/` already
-exist from a prior full run (no refitting). Same step 1→4 order as above, per
-model: retrain-and-export refresh flags, Blind-B export, fix columns, Blind-A
-assembly.
+exist from a prior full run (no refitting).
 
+**Do steps 1+2 (GPU, checkpoint reload)**, run every model's block below in sequence. **Then do step 3 for
+every model, and only after that run step 4 — never interleaved per model.**
+`assemble_blind_a`'s ground-truth backfill (`gt_map`) scans **every** CG
+folder under `models/CG_crossvalidation`, not just the one being assembled;
+if any other folder in the store still has the pre-fix constant-`turn`
+schema at assembly time, its rows get mis-keyed.
 
-### `query_full_multibehav_alltext_softor` — ndcg → `query_full_multibehav_alltext_softor_session_ndcg`
+### Steps 1+2 — per model, one at a time (GPU)
+
+#### `query_full_multibehav_alltext_softor` — ndcg → `query_full_multibehav_alltext_softor_session_ndcg`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -171,19 +176,11 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model query_full_multibehav_alltext_softor --urm_mode session \
     --config configs/query_full_multibehav_alltext_softor_ndcg.yaml \
-    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
-
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/query_full_multibehav_alltext_softor_session_ndcg/datasets \
-    --apply --drop_fallback_used --apply
-
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only query_full_multibehav_alltext_softor_session_ndcg
 ```
 
-### `query_full_multibehav_alltext_softor` — recall → `query_full_multibehav_alltext_softor_session`
+#### `query_full_multibehav_alltext_softor` — recall → `query_full_multibehav_alltext_softor_session`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -196,19 +193,11 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model query_full_multibehav_alltext_softor --urm_mode session \
     --config configs/query_full_multibehav_alltext_softor_recall.yaml \
-    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
-
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/query_full_multibehav_alltext_softor_session/datasets \
-    --apply --drop_fallback_used --apply
-
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only query_full_multibehav_alltext_softor_session
 ```
 
-### `split_hidim_xattn_hardneg_query_full_dif` — ndcg → `split_hidim_xattn_hardneg_query_full_dif_session_ndcg`
+#### `split_hidim_xattn_hardneg_query_full_dif` — ndcg → `split_hidim_xattn_hardneg_query_full_dif_session_ndcg`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -221,19 +210,11 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model split_hidim_xattn_hardneg_query_full_dif --urm_mode session \
     --config configs/split_hidim_xattn_hardneg_query_full_dif_ndcg.yaml \
-    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
-
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_dif_session_ndcg/datasets \
-    --apply --drop_fallback_used --apply
-
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only split_hidim_xattn_hardneg_query_full_dif_session_ndcg
 ```
 
-### `split_hidim_xattn_hardneg_query_full_nova` — ndcg → `split_hidim_xattn_hardneg_query_full_nova_session_ndcg`
+#### `split_hidim_xattn_hardneg_query_full_nova` — ndcg → `split_hidim_xattn_hardneg_query_full_nova_session_ndcg`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -246,19 +227,11 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model split_hidim_xattn_hardneg_query_full_nova --urm_mode session \
     --config configs/split_hidim_xattn_hardneg_query_full_nova_ndcg.yaml \
-    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
-
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_nova_session_ndcg/datasets \
-    --apply --drop_fallback_used --apply
-
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only split_hidim_xattn_hardneg_query_full_nova_session_ndcg
 ```
 
-### `split_hidim_xattn_hardneg_query_full_noiserobust` — recall → `split_hidim_xattn_hardneg_query_full_noiserobust_session`
+#### `split_hidim_xattn_hardneg_query_full_noiserobust` — recall → `split_hidim_xattn_hardneg_query_full_noiserobust_session`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -271,19 +244,11 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model split_hidim_xattn_hardneg_query_full_noiserobust --urm_mode session \
     --config configs/split_hidim_xattn_hardneg_query_full_noiserobust_recall.yaml \
-    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
-
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_noiserobust_session/datasets \
-    --apply --drop_fallback_used --apply
-
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only split_hidim_xattn_hardneg_query_full_noiserobust_session
 ```
 
-### `split_hidim_xattn_hardneg` — ndcg → `split_hidim_xattn_hardneg_session_ndcg`
+#### `split_hidim_xattn_hardneg` — ndcg → `split_hidim_xattn_hardneg_session_ndcg`
 
 ```bash
 cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
@@ -296,14 +261,36 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
     --model split_hidim_xattn_hardneg --urm_mode session \
     --config configs/split_hidim_xattn_hardneg_ndcg.yaml \
-    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
     --predict_blindB
+```
 
-cd ../../../../src/basic_candidate_generators # From the root of the repository
-uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-    --path models/CG_crossvalidation/split_hidim_xattn_hardneg_session_ndcg/datasets \
-    --apply --drop_fallback_used --apply
+### Step 3 — fix columns for all 6 (run only after every model above has finished)
 
-uv run python -m launchers_crossvalidation.assemble_blind_a \
-    --only split_hidim_xattn_hardneg_session_ndcg
+```bash
+cd src/basic_candidate_generators # From the root of the repository
+for folder in \
+    query_full_multibehav_alltext_softor_session_ndcg \
+    query_full_multibehav_alltext_softor_session \
+    split_hidim_xattn_hardneg_query_full_dif_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_nova_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_noiserobust_session \
+    split_hidim_xattn_hardneg_session_ndcg; do
+    uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+        --path "models/CG_crossvalidation/$folder/datasets" \
+        --apply --drop_fallback_used --apply
+done
+```
+
+### Step 4 — Blind-A assembly for all 6 (one call, only after step 3 above is done for all 6)
+
+```bash
+cd src/basic_candidate_generators # From the root of the repository
+uv run python -m launchers_crossvalidation.assemble_blind_a --only \
+    query_full_multibehav_alltext_softor_session_ndcg \
+    query_full_multibehav_alltext_softor_session \
+    split_hidim_xattn_hardneg_query_full_dif_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_nova_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_noiserobust_session \
+    split_hidim_xattn_hardneg_session_ndcg
 ```
