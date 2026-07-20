@@ -32,8 +32,21 @@ Note: The optuna database is required at `models/reranker_oof/optuna/blind_b/no_
 **Find your outputs:**
 You can find your outputs in the `models/reranker_oof/blind_b_retrain/no_filter_v5/v2_blind_last/` folder.
 
+**Resubmit from already-trained boosters (no retrain):**
+`s06_retrain_submit` always refits from the optuna study. If you already have
+boosters saved under `<out_dir>/boosters/booster_*.json` (from a prior s06 run,
+or copied in from elsewhere) and just want to regenerate the submission +
+candidates + metrics from them, use `s06b_submit_from_boosters` instead — same
+config, no GPU training, no optuna DB required:
+```bash
+uv run python -m launchers_overfit_blind_b.s06b_submit_from_boosters --config configs/blind_no_filter/xgb_v5.yaml --variants v2_blind_last
+```
+Reads the boosters from `models/reranker_oof/blind_b_retrain/<run_tag>/<variant>/boosters/`
+(same `out_dir` s06 writes to — `run_tag` comes from the config), and rewrites `submissions/`,
+`scored_*.parquet`, `metrics_*.csv`, `candidates/` in place. Skips SHAP (needs a live `dval`).
 
-## COMPLETE TUNING PIPELINE
+
+## COMPLETE TUNING PIPELINE (not needed, just for reference)
 
 Given the above prerequisites, you can run the complete tuning pipeline as follows:
 *(you can point the config files also at your own paths, if you have a different setup)*
