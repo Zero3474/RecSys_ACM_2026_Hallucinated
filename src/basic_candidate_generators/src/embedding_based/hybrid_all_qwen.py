@@ -126,3 +126,19 @@ class HybridAllQwen(HybridCG):
             "w_last_0p6b": self.w_last_0p6b, "w_prev_0p6b": self.w_prev_0p6b,
         })
         return st
+
+    def _set_model_state(self, state: dict) -> None:
+        super()._set_model_state(state)
+        for k in ("track_emb_dir_4b", "track_emb_dir_0p6b",
+                  "model_size_4b", "model_size_0p6b",
+                  "w_last_4b", "w_prev_4b", "w_last_0p6b", "w_prev_0p6b"):
+            if k in state:
+                setattr(self, k, state[k])
+        # extra towers aren't pickled (refit rebuilds them from cache, like
+        # the parent) — init to None so load() matches __init__'s state and
+        # the intermediate _to_gpu() call inside super().fit() doesn't
+        # AttributeError before fit() reloads and re-uploads them.
+        self.track_emb_4b = None
+        self.track_emb_0p6b = None
+        self._tower_gpu_4b = None
+        self._tower_gpu_0p6b = None

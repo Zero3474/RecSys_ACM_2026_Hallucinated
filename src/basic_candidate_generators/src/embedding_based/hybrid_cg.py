@@ -895,6 +895,9 @@ class HybridCG(BaseRecommender):
         for k, v in state.items():
             if k != "recommender_name":
                 setattr(self, k, v)
+        # optional cross-trial tuner injection (hybrid_cg.py:316) — never
+        # persisted, always unset after load (mirrors __init__).
+        self._tfidf_rk_inject = None
 
 
 def _maybe_torch(use_gpu: bool):

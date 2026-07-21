@@ -83,7 +83,12 @@ uv run python -u -m launchers_dro_oneshot.recreate_rrf_datasets \
 
 ## Stage 2 — session-DRO base CGs (all splits)
 
-First command = folds + holdout + blind-A; second = blind-B.
+First command = folds + holdout + blind-A; second = blind-B. blind-B has no
+checkpoint path — `export_blind_b_dro` always retrains by design (its
+query caches didn't exist when `full.pkl` was originally fit), so it's
+identical in both variants below.
+
+### Stage 2 — from hyperparameters (retrains from `best_params_*.yaml`)
 
 ```bash
 uv run python -u -m launchers_dro.retrain_and_export_dro --model emb_item_knn_8b --urm_mode session
@@ -96,14 +101,48 @@ uv run python -u -m launchers_dro.retrain_and_export_dro --model tower_cf_ensemb
 uv run python -u -m launchers_dro.export_blind_b_dro --model tower_cf_ensemble
 ```
 
+### Stage 2 — from checkpoints (loads `checkpoints/*.pkl`, no retrain)
+
+Requires `checkpoints/` already present under each CG's folder. Writes to
+`datasets/` (folds + holdout + blind-A only — no fit/refit happens for
+`emb_item_knn_8b`; `hybrid_all_qwen`/`tower_ensemble`/`tower_cf_ensemble`
+auto warm-refit their catalogue-cache arrays from `cache_dir`, their trained
+tower members stay loaded from the checkpoint — see script docstring).
+
+```bash
+uv run python -u -m launchers_dro.infer_from_checkpoints --model emb_item_knn_8b --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model emb_item_knn_8b
+uv run python -u -m launchers_dro.infer_from_checkpoints --model hybrid_all_qwen --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model hybrid_all_qwen
+uv run python -u -m launchers_dro.infer_from_checkpoints --model tower_ensemble --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model tower_ensemble
+uv run python -u -m launchers_dro.infer_from_checkpoints --model tower_cf_ensemble --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model tower_cf_ensemble
+```
+
 ## Stage 3 — session-DRO fusion heuristics (all splits, AFTER stages 1+2)
 
 `heuristic_v2_hybrid` ← `hybrid_all_qwen`; `heuristic_v3` ← `tower_cf_ensemble` + `rrf_oneshot`.
+Same blind-B caveat as stage 2 — `export_blind_b_dro` always retrains.
+
+### Stage 3 — from hyperparameters (retrains from `best_params_*.yaml`)
 
 ```bash
 uv run python -u -m launchers_dro.retrain_and_export_dro --model heuristic_v2_hybrid --urm_mode session
 uv run python -u -m launchers_dro.export_blind_b_dro --model heuristic_v2_hybrid
 uv run python -u -m launchers_dro.retrain_and_export_dro --model heuristic_v3 --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model heuristic_v3
+```
+
+### Stage 3 — from checkpoints (loads `checkpoints/*.pkl`, no retrain)
+
+Requires stage 2's checkpoint-replayed `datasets/` already written (these
+CGs read their upstream fallback parquets from disk on load).
+
+```bash
+uv run python -u -m launchers_dro.infer_from_checkpoints --model heuristic_v2_hybrid --urm_mode session
+uv run python -u -m launchers_dro.export_blind_b_dro --model heuristic_v2_hybrid
+uv run python -u -m launchers_dro.infer_from_checkpoints --model heuristic_v3 --urm_mode session
 uv run python -u -m launchers_dro.export_blind_b_dro --model heuristic_v3
 ```
 
