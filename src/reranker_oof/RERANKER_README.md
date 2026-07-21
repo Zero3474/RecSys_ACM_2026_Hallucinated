@@ -1,13 +1,51 @@
 # How to run the reranker pipeline
 
-**Requirements:** 
-- having produced the candidate generators output `models/CG_crossvalidation/<CG name>/datasets/`.
-- having the Qwen embeddings at `models/retrieval_text_towers`
+## Requirements
+
+- CG candidate outputs at `models/CG_crossvalidation/<CG name>/datasets/` for
+  **every** CG listed under `cgs:` in `configs/blind_no_filter/dataset.yaml`
+  (currently 14 — the 8 reranker CGs plus 6 `query_full_*`/`split_hidim_*`
+  BERT4Rec members), for every split the pipeline touches: `fold_{0..4}_oof_cg_val.parquet`
+  / `fold_{0..4}_oof_reranker_val.parquet` (needed even for blind-only runs —
+  the per-CG isotonic calibrator is always fit from these), `holdout_candidates.parquet`,
+  `blind_b_candidates.parquet`, `blind_a_all_turns_candidates.parquet`.
+- `data/splitK/` (folds + `holdout_test.parquet`) — feeds the per-split URM
+  (popularity stats) and session-history features.
+- Ground truth: `data/exploded_blind/blind-a.parquet`, `data/exploded_blind/blind-b.parquet`.
+- Track/user metadata: `data/talkpl-ai/TalkPlayData-Challenge-Track-Metadata/`,
+  `data/talkpl-ai/TalkPlayData-Challenge-User-Metadata/`.
+- Warm-user flag: `data/talkpl-ai/TalkPlayData-Challenge-User-Embeddings/` (train + test_warm parquets).
+- Embedding features (`embeddings.enabled: true` in `dataset.yaml`, on by default):
+  - Qwen3-8B **track** tower: `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/dense_tracks_len256_poollast`.
+  - Qwen3-8B **query** cache (all splits, incl. blind): `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/dense_*`.
+  - SigLIP2 + LAION-CLAP track modality embeddings: `data/talkpl-ai/TalkPlayData-Challenge-Track-Embeddings/data/all_tracks-*.parquet`.
+- For retrain (`s06_retrain_submit`) only: optuna DB at `models/reranker_oof/optuna/blind_b/no_filter_v5`.
 
 ```bash
 cd src/reranker_oof
-
 ```
+## Inference
+
+No retrain, no optuna DB — only loads boosters already saved under
+`<out_dir>/boosters/booster_*.json` (from a prior `s06` run, or copied in
+from elsewhere) and rewrites `submissions/`, `scored_*.parquet`,
+`metrics_*.csv`, `candidates/` in place. Skips SHAP (needs a live `dval`).
+
+**Blind-B-only fast resubmit (assemble + resubmit in one script):**
+```bash
+uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
+    --dataset_config configs/blind_no_filter/dataset.yaml \
+    --config configs/blind_no_filter/xgb_v5.yaml \
+    --variants v2_blind_last
+```
+For when only the Blind-B CG candidates changed and you don't want to pay for
+a full dataset assembly (train/val/holdout/blind_a) or a retrain. 
+Still fits the per-CG calibrators from the "train" (fold
+OOF) CG parquets first (inherent to `s03`, unrelated to Blind-B), so those
+must already be present for all 14 CGs.
+
+
+## Retrain reranker - no tuning
 
 **Assemble the dataset:**
 ```bash
@@ -21,8 +59,6 @@ test_tracks:
   path: data/talkpl-ai/TalkPlayData-Challenge-Track-Metadata/data/test_tracks-00000-of-00001.parquet
 ```
 
-
-
 **Retrain reranker and make inferece:**
 ```bash
 uv run python -u -m launchers_overfit_blind_b.s06_retrain_submit --config configs/blind_no_filter/xgb_v5.yaml
@@ -31,19 +67,6 @@ Note: The optuna database is required at `models/reranker_oof/optuna/blind_b/no_
 
 **Find your outputs:**
 You can find your outputs in the `models/reranker_oof/blind_b_retrain/no_filter_v5/v2_blind_last/` folder.
-
-**Resubmit from already-trained boosters (no retrain):**
-`s06_retrain_submit` always refits from the optuna study. If you already have
-boosters saved under `<out_dir>/boosters/booster_*.json` (from a prior s06 run,
-or copied in from elsewhere) and just want to regenerate the submission +
-candidates + metrics from them, use `s06b_submit_from_boosters` instead — same
-config, no GPU training, no optuna DB required:
-```bash
-uv run python -m launchers_overfit_blind_b.s06b_submit_from_boosters --config configs/blind_no_filter/xgb_v5.yaml --variants v2_blind_last
-```
-Reads the boosters from `models/reranker_oof/blind_b_retrain/<run_tag>/<variant>/boosters/`
-(same `out_dir` s06 writes to — `run_tag` comes from the config), and rewrites `submissions/`,
-`scored_*.parquet`, `metrics_*.csv`, `candidates/` in place. Skips SHAP (needs a live `dval`).
 
 
 ## COMPLETE TUNING PIPELINE (not needed, just for reference)

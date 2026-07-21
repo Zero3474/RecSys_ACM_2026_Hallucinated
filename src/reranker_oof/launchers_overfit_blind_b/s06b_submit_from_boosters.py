@@ -33,7 +33,8 @@ from launchers_overfit_blind_b.s06_retrain_submit import (             # noqa: E
 )
 
 
-def run(cfg: dict, variants_sel: list[str]) -> int:
+def run(cfg: dict, variants_sel: list[str],
+        kinds: tuple[str, ...] = ("blind_b", "blind_a")) -> int:
     ensure_output_dirs()
     set_active_dataset(cfg["dataset_name"])
     blind_raw = Path(cfg["blind_raw"])
@@ -42,43 +43,44 @@ def run(cfg: dict, variants_sel: list[str]) -> int:
     tag = cfg.get("run_tag") or cfg["dataset_name"]
     cand_top = int(cfg.get("cand_top", 200))
 
+    chunk_fns = {"blind_b": blind_chunks, "blind_a": blind_a_chunks}
+    raw_paths = {"blind_b": blind_raw, "blind_a": BLIND_A_RAW}
+
     for name in variants_sel:
         out_dir = REPO_ROOT / "models" / "reranker_oof" / "blind_b_retrain" / tag / name
         booster_paths = sorted((out_dir / "boosters").glob("booster_*.json"),
                                key=lambda p: int(p.stem.split("_")[1]))
         if not booster_paths:
             raise SystemExit(f"[s06b] no boosters found in {out_dir / 'boosters'}")
-        print(f"\n========== resubmit {name}: {len(booster_paths)} booster(s) from {out_dir} ==========")
+        print(f"\n========== resubmit {name}: {len(booster_paths)} booster(s) from "
+              f"{out_dir} ({', '.join(kinds)}) ==========")
 
         # feat_cols must match what the boosters were trained with — recomputed
         # the same deterministic way s06 does (cfg.feat_cols_keep + schema probe).
+        # Always probed against blind_b's schema (no goal_* cols), even when only
+        # scoring blind_a, since that's the schema the boosters were fit against.
         feat_cols = resolve_feats(pl.read_parquet(blind_chunks()[0], n_rows=10),
                                   cfg.get("feat_cols_keep"),
                                   pl.read_parquet(blind_chunks()[0], n_rows=1))
 
-        scored_b_members: list[pl.DataFrame] = []
-        scored_a_members: list[pl.DataFrame] = []
+        scored_members: dict[str, list[pl.DataFrame]] = {k: [] for k in kinds}
         for j, bp in enumerate(booster_paths):
             model = XGBReranker()
             model._booster = xgb.Booster()
             model._booster.load_model(str(bp))
             print(f"  loaded {bp}")
-            scored_b_members.append(_score_chunks(model, feat_cols, blind_chunks()))
-            scored_a_members.append(_score_chunks(model, feat_cols, blind_a_chunks()))
+            for k in kinds:
+                scored_members[k].append(_score_chunks(model, feat_cols, chunk_fns[k]()))
             model.release(); gc.collect()
 
         n = len(booster_paths)
         c_alpha = float(cfg.get("conformal_alpha", 0.1))
-        ens_b = _rank_average(scored_b_members)
-        ens_a = _rank_average(scored_a_members)
-        _emit_scored("blind_b", ens_b, blind_raw, out_dir, tag, name,
-                     n_members=n, conformal_alpha=c_alpha, bag_label="")
-        _emit_scored("blind_a", ens_a, BLIND_A_RAW, out_dir, tag, name,
-                     n_members=n, conformal_alpha=c_alpha, bag_label="")
-        _export_candidates("blind_b", scored_b_members, ens_b, out_dir,
-                           tag, name, cand_top, n, bag_label="")
-        _export_candidates("blind_a", scored_a_members, ens_a, out_dir,
-                           tag, name, cand_top, n, bag_label="")
+        for k in kinds:
+            ens = _rank_average(scored_members[k])
+            _emit_scored(k, ens, raw_paths[k], out_dir, tag, name,
+                         n_members=n, conformal_alpha=c_alpha, bag_label="")
+            _export_candidates(k, scored_members[k], ens, out_dir,
+                               tag, name, cand_top, n, bag_label="")
         print(f"[s06b] {name}: resubmitted from {n} saved booster(s) → {out_dir}")
 
     return 0
@@ -89,10 +91,12 @@ def main() -> int:
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--variants", nargs="+", choices=["v1_blind_all", "v2_blind_last"],
                     default=["v2_blind_last"])
+    ap.add_argument("--kinds", nargs="+", choices=["blind_b", "blind_a"],
+                    default=["blind_b", "blind_a"])
     args = ap.parse_args()
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
-    return run(cfg, variants_sel=args.variants)
+    return run(cfg, variants_sel=args.variants, kinds=tuple(args.kinds))
 
 
 if __name__ == "__main__":
