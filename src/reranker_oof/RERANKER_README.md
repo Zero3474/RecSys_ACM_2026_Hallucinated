@@ -9,16 +9,9 @@
   / `fold_{0..4}_oof_reranker_val.parquet` (needed even for blind-only runs —
   the per-CG isotonic calibrator is always fit from these), `holdout_candidates.parquet`,
   `blind_b_candidates.parquet`, `blind_a_all_turns_candidates.parquet`.
-- `data/splitK/` (folds + `holdout_test.parquet`) — feeds the per-split URM
-  (popularity stats) and session-history features.
-- Ground truth: `data/exploded_blind/blind-a.parquet`, `data/exploded_blind/blind-b.parquet`.
-- Track/user metadata: `data/talkpl-ai/TalkPlayData-Challenge-Track-Metadata/`,
-  `data/talkpl-ai/TalkPlayData-Challenge-User-Metadata/`.
-- Warm-user flag: `data/talkpl-ai/TalkPlayData-Challenge-User-Embeddings/` (train + test_warm parquets).
-- Embedding features (`embeddings.enabled: true` in `dataset.yaml`, on by default):
-  - Qwen3-8B **track** tower: `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/dense_tracks_len256_poollast`.
-  - Qwen3-8B **query** cache (all splits, incl. blind): `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/dense_*`.
-  - SigLIP2 + LAION-CLAP track modality embeddings: `data/talkpl-ai/TalkPlayData-Challenge-Track-Embeddings/data/all_tracks-*.parquet`.
+- `data/splitK/` (folds + `holdout_test.parquet`), plus `data/exploded_blind/blind-{a,b}.parquet` for ground truth.
+- Talkpl-ai catalog: Track-Metadata, User-Metadata, User-Embeddings (warm-user flag), Track-Embeddings (SigLIP2 + LAION-CLAP modality embeddings).
+- Qwen3-8B towers at `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/` — track tower + per-split query caches (incl. blind).
 - For retrain (`s06_retrain_submit`) only: optuna DB at `models/reranker_oof/optuna/blind_b/no_filter_v5`.
 
 ```bash
@@ -27,9 +20,8 @@ cd src/reranker_oof
 ## Inference
 
 No retrain, no optuna DB — only loads boosters already saved under
-`<out_dir>/boosters/booster_*.json` (from a prior `s06` run, or copied in
-from elsewhere) and rewrites `submissions/`, `scored_*.parquet`,
-`metrics_*.csv`, `candidates/` in place. Skips SHAP (needs a live `dval`).
+`<out_dir>/boosters/booster_*.json` (from a prior `s06` run) and rewrites `submissions/`, `scored_*.parquet`,
+`metrics_*.csv`, `candidates/` in place. Skips SHAP.
 
 **Blind-B-only fast resubmit (assemble + resubmit in one script):**
 ```bash
