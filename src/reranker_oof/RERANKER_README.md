@@ -33,10 +33,6 @@ uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
     --config configs/blind_no_filter/xgb_v5.yaml \
     --variants v2_blind_last
 ```
-For when only the Blind-B CG candidates changed and you don't want to pay for
-a full dataset assembly (train/val/holdout/blind_a) or a retrain. Loads the
-saved calibrators above instead of fitting them, so it no longer touches the
-14 CGs' fold OOF parquets — only their `blind_b_candidates.parquet`.
 
 
 ## Retrain reranker - no tuning
