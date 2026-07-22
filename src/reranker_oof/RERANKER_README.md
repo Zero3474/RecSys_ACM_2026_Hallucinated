@@ -26,13 +26,6 @@ No retrain, no optuna DB — only loads boosters already saved under
 
 **Blind-B-only fast resubmit (assemble + resubmit in one script):**
 
-Requires saved calibrators (once per dataset config, or whenever the 14 CGs'
-fold OOF candidates change):
-```bash
-uv run python -m launchers_overfit_blind_b.train_cg_calibrators \
-    --config configs/blind_no_filter/dataset.yaml
-```
-Then:
 ```bash
 uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
     --dataset_config configs/blind_no_filter/dataset.yaml \
@@ -46,6 +39,12 @@ saved calibrators above instead of fitting them, so it no longer touches the
 
 
 ## Retrain reranker - no tuning
+
+Store the calibrators for Blind-B-only inference (from the 14 CGs' fold OOF parquets):
+```bash
+uv run python -m launchers_overfit_blind_b.train_cg_calibrators \
+    --config configs/blind_no_filter/dataset.yaml
+```
 
 **Assemble the dataset:**
 ```bash
