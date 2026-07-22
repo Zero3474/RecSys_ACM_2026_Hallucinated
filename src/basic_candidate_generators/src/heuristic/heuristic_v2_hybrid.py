@@ -36,6 +36,7 @@ _FALLBACK_GLOBS = (
     "fold_*_oof_reranker_val.parquet",
     "holdout_candidates.parquet",
     "blind_candidates.parquet",
+    "blind_b_candidates.parquet",
 )
 
 
