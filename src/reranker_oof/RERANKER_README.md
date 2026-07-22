@@ -25,6 +25,7 @@ No retrain, no optuna DB — only loads boosters already saved under
 `metrics_*.csv`, `candidates/` in place. Skips SHAP.
 
 **Blind-B-only fast resubmit (assemble + resubmit in one script):**
+Calibrators checkpoint is required at `models/reranker_oof/calibrators/blind_no_filter/calibrators.pkl`
 
 ```bash
 uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
