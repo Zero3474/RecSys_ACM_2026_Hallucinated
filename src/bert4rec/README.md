@@ -148,20 +148,164 @@ through `fix_dataset_columns`.
 
 
 
-## Reproduce all 6 models' reranker datasets from checkpoints
+## TRAINING
 
-Checkpoint-only re-export of everything `src/reranker_oof`'s `dataset.yaml`
-needs, for all 6 `feature_bert4rec` CGs, assuming `checkpoints/` already
-exist from a prior full run (no refitting).
+Full retrain (from scratch) of all 6 `feature_bert4rec` CGs, producing
+`checkpoints/` + everything `src/reranker_oof`'s `dataset.yaml` needs.
 
-**Do steps 1+2 (GPU, checkpoint reload)**, run every model's block below in sequence. **Then do step 3 for
+**Do steps 1+2 (GPU, retrain)**, run every model's block below in sequence. **Then do step 3 for
 every model, and only after that run step 4 — never interleaved per model.**
 `assemble_blind_a`'s ground-truth backfill (`gt_map`) scans **every** CG
 folder under `models/CG_crossvalidation`, not just the one being assembled;
 if any other folder in the store still has the pre-fix constant-`turn`
 schema at assembly time, its rows get mis-keyed.
 
-### Steps 1+2 — per model, one at a time (GPU)
+### Steps 1+2 — per model, one at a time (GPU, retrain)
+
+#### `query_full_multibehav_alltext_softor` — ndcg → `query_full_multibehav_alltext_softor_session_ndcg`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model query_full_multibehav_alltext_softor --urm_mode session \
+    --config configs/query_full_multibehav_alltext_softor_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model query_full_multibehav_alltext_softor --urm_mode session \
+    --config configs/query_full_multibehav_alltext_softor_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+#### `query_full_multibehav_alltext_softor` — recall → `query_full_multibehav_alltext_softor_session`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model query_full_multibehav_alltext_softor --urm_mode session \
+    --config configs/query_full_multibehav_alltext_softor_recall.yaml \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model query_full_multibehav_alltext_softor --urm_mode session \
+    --config configs/query_full_multibehav_alltext_softor_recall.yaml \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+#### `split_hidim_xattn_hardneg_query_full_dif` — ndcg → `split_hidim_xattn_hardneg_query_full_dif_session_ndcg`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_dif --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_dif_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_dif --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_dif_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+#### `split_hidim_xattn_hardneg_query_full_nova` — ndcg → `split_hidim_xattn_hardneg_query_full_nova_session_ndcg`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_nova --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_nova_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_nova --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_nova_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+#### `split_hidim_xattn_hardneg_query_full_noiserobust` — recall → `split_hidim_xattn_hardneg_query_full_noiserobust_session`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_noiserobust --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_noiserobust_recall.yaml \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg_query_full_noiserobust --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_query_full_noiserobust_recall.yaml \
+    --objective recall --objective_k 200 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+#### `split_hidim_xattn_hardneg` — ndcg → `split_hidim_xattn_hardneg_session_ndcg`
+
+```bash
+cd src/bert4rec/src/basic_candidate_generators # From the root of the repository
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500
+
+uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
+    --model split_hidim_xattn_hardneg --urm_mode session \
+    --config configs/split_hidim_xattn_hardneg_ndcg.yaml \
+    --objective ndcg --objective_k 20 --storage_dir models/CG_crossvalidation --top_k 500 \
+    --predict_blindB
+```
+
+### Step 3 — fix columns for all 6 (run only after every model above has finished)
+
+```bash
+cd src/basic_candidate_generators # From the root of the repository
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/query_full_multibehav_alltext_softor_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/query_full_multibehav_alltext_softor_session/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_dif_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_nova_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_noiserobust_session/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+```
+
+### Step 4 — Blind-A assembly for all 6 (one call, only after step 3 above is done for all 6)
+
+```bash
+cd src/basic_candidate_generators # From the root of the repository
+uv run python -m launchers_crossvalidation.assemble_blind_a --only \
+    query_full_multibehav_alltext_softor_session_ndcg \
+    query_full_multibehav_alltext_softor_session \
+    split_hidim_xattn_hardneg_query_full_dif_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_nova_session_ndcg \
+    split_hidim_xattn_hardneg_query_full_noiserobust_session \
+    split_hidim_xattn_hardneg_session_ndcg
+```
+
+## INFERENCE (checkpoint-only)
+
+Checkpoint-only re-export of everything `src/reranker_oof`'s `dataset.yaml`
+needs, for all 6 `feature_bert4rec` CGs, assuming `checkpoints/` already
+exist from a prior full Training run above (no refitting).
+
+**Do steps 1+2 (GPU, checkpoint reload)**, run every model's block below in sequence. **Then do step 3 for
+every model, and only after that run step 4 — never interleaved per model.**
+Same `gt_map`-scans-every-folder caveat as Training applies here too.
+
+### Steps 1+2 — per model, one at a time (GPU, checkpoint reload)
 
 #### `query_full_multibehav_alltext_softor` — ndcg → `query_full_multibehav_alltext_softor_session_ndcg`
 
@@ -269,17 +413,24 @@ uv run --no-sync python -m launchers_crossvalidation.retrain_and_export \
 
 ```bash
 cd src/basic_candidate_generators # From the root of the repository
-for folder in \
-    query_full_multibehav_alltext_softor_session_ndcg \
-    query_full_multibehav_alltext_softor_session \
-    split_hidim_xattn_hardneg_query_full_dif_session_ndcg \
-    split_hidim_xattn_hardneg_query_full_nova_session_ndcg \
-    split_hidim_xattn_hardneg_query_full_noiserobust_session \
-    split_hidim_xattn_hardneg_session_ndcg; do
-    uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
-        --path "models/CG_crossvalidation/$folder/datasets" \
-        --apply --drop_fallback_used --apply
-done
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/query_full_multibehav_alltext_softor_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/query_full_multibehav_alltext_softor_session/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_dif_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_nova_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_query_full_noiserobust_session/datasets" \
+    --apply --drop_fallback_used --apply
+uv run python -u -m launchers_crossvalidation.fix_dataset_columns \
+    --path "models/CG_crossvalidation/split_hidim_xattn_hardneg_session_ndcg/datasets" \
+    --apply --drop_fallback_used --apply
 ```
 
 ### Step 4 — Blind-A assembly for all 6 (one call, only after step 3 above is done for all 6)

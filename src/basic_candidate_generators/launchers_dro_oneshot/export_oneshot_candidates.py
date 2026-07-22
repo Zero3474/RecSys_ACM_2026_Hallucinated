@@ -87,7 +87,9 @@ def _blind_context(blind: pl.DataFrame, urm_mode: str) -> pl.DataFrame:
              .rename({"content": "track_id"})
              .select("session_id", "user_id", "turn_number", "track_id"))
     # one target row per session at the last conversation turn (track_id null)
-    target = (convs.group_by("session_id")
+    # maintain_order: unordered group_by row order otherwise leaks into GPU
+    # batch composition downstream (float32 reduction noise → top-k reshuffle).
+    target = (convs.group_by("session_id", maintain_order=True)
               .agg(pl.col("turn_number").max().alias("turn_number"))
               .join(blind.select("session_id", "user_id").unique(subset=["session_id"]),
                     on="session_id", how="left")

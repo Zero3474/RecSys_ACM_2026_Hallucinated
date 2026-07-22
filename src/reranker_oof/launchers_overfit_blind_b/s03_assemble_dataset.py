@@ -23,6 +23,7 @@ import math
 import shutil
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 _PKG_ROOT = Path(__file__).resolve().parents[1]
@@ -168,26 +169,29 @@ def _build_split(split: str, fold: int, cg_keep: list[str], k_per_cg: int,
             shutil.rmtree(shard_root, ignore_errors=True)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--config", type=Path, required=True)
-    ap.add_argument("--rrf_config", type=Path, default=None)
-    ap.add_argument("--splits", default="train,val,holdout,blind_b,blind_a")
-    ap.add_argument("--folds", default="0,1,2,3,4")
-    ap.add_argument("--groups_per_chunk", type=int, default=None)
-    ap.add_argument("--k_per_cg", type=int, default=None)
-    ap.add_argument("--force", action="store_true")
-    args = ap.parse_args()
+@dataclass
+class AssemblyContext:
+    """Everything `_build_split` needs besides the (pre-fit or loaded)
+    calibration artifacts — shared by the full assembler (`main()`) and any
+    scoped single-split launcher (e.g. a blind-B-only, calibrator-free run)
+    so the two can't drift on rrf/k_per_cg/emb_cache resolution."""
+    cg_keep: list[str]
+    rrf: dict
+    k_per_cg: int
+    groups_per_chunk: int
+    embeddings_cfg: dict | None
+    tt_spec: dict | None
+    emb_cache_dir: Path
+    out_root: Path
 
-    ensure_output_dirs()
-    cfg = load_config(args.config)
-    register_cg_paths(cfg)
+
+def load_assembly_context(
+    cfg: dict, *, rrf_config: Path | None = None,
+    groups_per_chunk: int | None = None, k_per_cg: int | None = None,
+) -> AssemblyContext:
     cg_keep = list(cfg["cgs"])
-    splits = [s.strip() for s in args.splits.split(",") if s.strip()]
-    folds = [int(x) for x in args.folds.split(",") if x.strip()]
-    assert_cgs_have(cfg, splits)
 
-    rrf_path = args.rrf_config or cfg.get("tune", {}).get("rrf_out")
+    rrf_path = rrf_config or cfg.get("tune", {}).get("rrf_out")
     if rrf_path is None:
         raise SystemExit("no rrf config (set tune.rrf_out or --rrf_config)")
     rrf_path = Path(rrf_path)
@@ -198,26 +202,12 @@ def main() -> int:
     print(f"[blind_b/assemble] rrf={rrf_path.name} method={rrf['method']} "
           f"k={rrf.get('method_params', {}).get('k')} cgs={len(cg_keep)}")
 
-    k_per_cg = int(args.k_per_cg if args.k_per_cg is not None
+    k_per_cg = int(k_per_cg if k_per_cg is not None
                    else cfg.get("max_candidates_per_cg", 200))
-    groups_per_chunk = int(args.groups_per_chunk if args.groups_per_chunk is not None
+    groups_per_chunk = int(groups_per_chunk if groups_per_chunk is not None
                            else cfg.get("groups_per_chunk", 3000))
     embeddings_cfg = cfg.get("embeddings")
     tt_spec = test_tracks_spec(cfg)
-
-    # Per-CG calibration + conformal artifacts (fit once on the OOF folds).
-    calib = None
-    cc = cfg.get("cg_calibration") or {}
-    if cc.get("enabled", True):
-        cg_oof = {k: {cg: cg_candidate_path(cg, "train", k) for cg in cg_keep}
-                  for k in folds}
-        print(f"[blind_b/assemble] fitting CG calibrators "
-              f"({cc.get('method', 'isotonic')}, {cc.get('feature', 'reciprocal_rank')}) …")
-        calib = fit_artifacts(
-            cg_keep, cg_oof, method=cc.get("method", "isotonic"),
-            feature_col=cc.get("feature", "reciprocal_rank"),
-            alpha=float(cc.get("alpha", 0.1)), k_per_cg=k_per_cg, verbose=True,
-        )
 
     out_root = DATASETS_DIR / cfg["name"]
     # Embedding cosines are keyed by (split, fold, session, turn, track) and are
@@ -233,14 +223,61 @@ def main() -> int:
         emb_cache_dir = DATASETS_DIR / "_emb_cache_shared"
     emb_cache_dir.mkdir(parents=True, exist_ok=True)
     print(f"[blind_b/assemble] emb_cache (shared) = {emb_cache_dir}")
-    print(f"[blind_b/assemble] out={out_root} splits={splits} folds={folds} "
-          f"k_per_cg={k_per_cg} groups_per_chunk={groups_per_chunk}")
+    print(f"[blind_b/assemble] out={out_root} k_per_cg={k_per_cg} "
+          f"groups_per_chunk={groups_per_chunk}")
+
+    return AssemblyContext(
+        cg_keep=cg_keep, rrf=rrf, k_per_cg=k_per_cg, groups_per_chunk=groups_per_chunk,
+        embeddings_cfg=embeddings_cfg, tt_spec=tt_spec, emb_cache_dir=emb_cache_dir,
+        out_root=out_root,
+    )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--config", type=Path, required=True)
+    ap.add_argument("--rrf_config", type=Path, default=None)
+    ap.add_argument("--splits", default="train,val,holdout,blind_b,blind_a")
+    ap.add_argument("--folds", default="0,1,2,3,4")
+    ap.add_argument("--groups_per_chunk", type=int, default=None)
+    ap.add_argument("--k_per_cg", type=int, default=None)
+    ap.add_argument("--force", action="store_true")
+    args = ap.parse_args()
+
+    ensure_output_dirs()
+    cfg = load_config(args.config)
+    register_cg_paths(cfg)
+    splits = [s.strip() for s in args.splits.split(",") if s.strip()]
+    folds = [int(x) for x in args.folds.split(",") if x.strip()]
+    assert_cgs_have(cfg, splits)
+
+    ctx = load_assembly_context(
+        cfg, rrf_config=args.rrf_config,
+        groups_per_chunk=args.groups_per_chunk, k_per_cg=args.k_per_cg,
+    )
+    cg_keep = ctx.cg_keep
+
+    # Per-CG calibration + conformal artifacts (fit once on the OOF folds).
+    calib = None
+    cc = cfg.get("cg_calibration") or {}
+    if cc.get("enabled", True):
+        cg_oof = {k: {cg: cg_candidate_path(cg, "train", k) for cg in cg_keep}
+                  for k in folds}
+        print(f"[blind_b/assemble] fitting CG calibrators "
+              f"({cc.get('method', 'isotonic')}, {cc.get('feature', 'reciprocal_rank')}) …")
+        calib = fit_artifacts(
+            cg_keep, cg_oof, method=cc.get("method", "isotonic"),
+            feature_col=cc.get("feature", "reciprocal_rank"),
+            alpha=float(cc.get("alpha", 0.1)), k_per_cg=ctx.k_per_cg, verbose=True,
+        )
+
+    print(f"[blind_b/assemble] splits={splits} folds={folds}")
 
     def build(split: str, fold: int, *, blind_raw: Path | None = None,
               blind_gt: Path | None = None) -> None:
-        _build_split(split, fold, cg_keep, k_per_cg, groups_per_chunk,
-                     _split_save_dir(out_root, split, fold), args.force,
-                     rrf, embeddings_cfg, tt_spec, emb_cache_dir, calib,
+        _build_split(split, fold, cg_keep, ctx.k_per_cg, ctx.groups_per_chunk,
+                     _split_save_dir(ctx.out_root, split, fold), args.force,
+                     ctx.rrf, ctx.embeddings_cfg, ctx.tt_spec, ctx.emb_cache_dir, calib,
                      blind_raw=blind_raw, blind_gt=blind_gt)
         gc.collect()
 

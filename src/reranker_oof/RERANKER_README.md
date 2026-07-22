@@ -5,10 +5,11 @@
 - CG candidate outputs at `models/CG_crossvalidation/<CG name>/datasets/` for
   **every** CG listed under `cgs:` in `configs/blind_no_filter/dataset.yaml`
   (currently 14 — the 8 reranker CGs plus 6 `query_full_*`/`split_hidim_*`
-  BERT4Rec members), for every split the pipeline touches: `fold_{0..4}_oof_cg_val.parquet`
-  / `fold_{0..4}_oof_reranker_val.parquet` (needed even for blind-only runs —
-  the per-CG isotonic calibrator is always fit from these), `holdout_candidates.parquet`,
-  `blind_b_candidates.parquet`, `blind_a_all_turns_candidates.parquet`.
+  BERT4Rec members): `fold_{0..4}_oof_cg_val.parquet` / `fold_{0..4}_oof_reranker_val.parquet`,
+  `holdout_candidates.parquet`, `blind_b_candidates.parquet`, `blind_a_all_turns_candidates.parquet`.
+  Blind-B-only inference (see below) needs just `blind_b_candidates.parquet`.
+- Saved calibrators for Blind-B-only inference: `models/reranker_oof/calibrators/<name>/calibrators.pkl`
+  (`train_cg_calibrators.py` — fits from `fold_{0..4}_oof_cg_val.parquet`, needs all 14 CGs).
 - `data/splitK/` (folds + `holdout_test.parquet`), plus `data/exploded_blind/blind-{a,b}.parquet` for ground truth.
 - Talkpl-ai catalog: Track-Metadata, User-Metadata, User-Embeddings (warm-user flag), Track-Embeddings (SigLIP2 + LAION-CLAP modality embeddings).
 - Qwen3-8B towers at `models/retrieval_text_towers/Qwen__Qwen3-Embedding-8B/` — track tower + per-split query caches (incl. blind).
@@ -24,6 +25,14 @@ No retrain, no optuna DB — only loads boosters already saved under
 `metrics_*.csv`, `candidates/` in place. Skips SHAP.
 
 **Blind-B-only fast resubmit (assemble + resubmit in one script):**
+
+Requires saved calibrators (once per dataset config, or whenever the 14 CGs'
+fold OOF candidates change):
+```bash
+uv run python -m launchers_overfit_blind_b.train_cg_calibrators \
+    --config configs/blind_no_filter/dataset.yaml
+```
+Then:
 ```bash
 uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
     --dataset_config configs/blind_no_filter/dataset.yaml \
@@ -31,10 +40,9 @@ uv run python -m launchers_overfit_blind_b.s06c_blind_b_only \
     --variants v2_blind_last
 ```
 For when only the Blind-B CG candidates changed and you don't want to pay for
-a full dataset assembly (train/val/holdout/blind_a) or a retrain. 
-Still fits the per-CG calibrators from the "train" (fold
-OOF) CG parquets first (inherent to `s03`, unrelated to Blind-B), so those
-must already be present for all 14 CGs.
+a full dataset assembly (train/val/holdout/blind_a) or a retrain. Loads the
+saved calibrators above instead of fitting them, so it no longer touches the
+14 CGs' fold OOF parquets — only their `blind_b_candidates.parquet`.
 
 
 ## Retrain reranker - no tuning

@@ -73,7 +73,9 @@ def build_context_df(
     gt_df:
         (user_id, session_id, session_date, track_id) — the last (GT) turn only.
     """
-    max_turns = test_df.group_by("session_id").agg(
+    # maintain_order: unordered group_by row order otherwise leaks into GPU
+    # batch composition downstream (float32 reduction noise → top-k reshuffle).
+    max_turns = test_df.group_by("session_id", maintain_order=True).agg(
         pl.col("turn_number").max().alias("max_turn")
     )
     test_df = test_df.join(max_turns, on="session_id", how="left")
@@ -90,7 +92,7 @@ def build_context_df(
 
     earlier_rows: list[pl.DataFrame] = []
     users_with_multiple = (
-        sess_dates.group_by("user_id")
+        sess_dates.group_by("user_id", maintain_order=True)
         .agg(pl.col("session_id").n_unique().alias("n"))
         .filter(pl.col("n") > 1)["user_id"]
         .to_list()
@@ -98,7 +100,7 @@ def build_context_df(
 
     if inject_multi_session and users_with_multiple:
         multi_df = test_df.filter(pl.col("user_id").is_in(users_with_multiple))
-        for uid, user_sessions in multi_df.group_by("user_id"):
+        for uid, user_sessions in multi_df.group_by("user_id", maintain_order=True):
             sess_order = (
                 user_sessions.select(["session_id", "session_date"])
                 .unique(subset=["session_id"])

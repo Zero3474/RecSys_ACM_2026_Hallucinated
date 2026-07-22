@@ -71,6 +71,7 @@ BLIND_B_RAW: Path = (
 OUT_DIR: Path = REPO_ROOT / "models" / "reranker_oof"
 DATASETS_DIR: Path = OUT_DIR / "datasets"
 SUBSAMPLES_DIR: Path = OUT_DIR / "subsamples"
+CALIBRATORS_DIR: Path = OUT_DIR / "calibrators"
 
 # ---------------------------------------------------------------------------
 # Active dataset name — set by apply_feature_builder_config or set_active_dataset
@@ -188,6 +189,7 @@ def ensure_output_dirs() -> None:
         OUT_DIR,
         DATASETS_DIR,
         SUBSAMPLES_DIR,
+        CALIBRATORS_DIR,
         OPTUNA_DIR,
         REPORTS_DIR,
         PLOTS_DIR,

@@ -281,5 +281,7 @@ class SingleTowerCG(BaseRecommender):
             setattr(self, k, v)
         # query store (inference query lookup) is reloaded lazily on next fit;
         # for export/load paths the caller refits or the store is rebuilt.
-        if self.query_cache_root is not None and not self._infer_emb:
+        # load() calls _set_model_state on a __new__'d instance (no __init__),
+        # so _infer_emb may not exist yet — getattr instead of self._infer_emb.
+        if self.query_cache_root is not None and not getattr(self, "_infer_emb", None):
             self._load_inference_queries()

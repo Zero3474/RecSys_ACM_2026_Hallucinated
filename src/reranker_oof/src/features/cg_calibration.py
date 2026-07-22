@@ -23,6 +23,7 @@ peak ~50 MB per CG), independently from the per-chunk feature build.
 """
 from __future__ import annotations
 
+import pickle
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -78,6 +79,25 @@ class _Identity:
         return np.clip(np.asarray(x, dtype=np.float64), 0.0, 1.0)
 
 
+class _IsotonicCal:
+    """Picklable wrapper around a fitted IsotonicRegression (plain lambdas
+    aren't stdlib-picklable — needed so CalibrationArtifacts can be persisted)."""
+    def __init__(self, ir: IsotonicRegression) -> None:
+        self.ir = ir
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return np.clip(self.ir.transform(np.asarray(x, dtype=np.float64)), 0.0, 1.0)
+
+
+class _PlattCal:
+    """Picklable wrapper around a fitted LogisticRegression."""
+    def __init__(self, lr: LogisticRegression) -> None:
+        self.lr = lr
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self.lr.predict_proba(np.asarray(x, dtype=np.float64).reshape(-1, 1))[:, 1]
+
+
 def _fit_one_calibrator(
     feat: np.ndarray, y: np.ndarray, method: str,
 ) -> Callable[[np.ndarray], np.ndarray]:
@@ -91,11 +111,11 @@ def _fit_one_calibrator(
     if method == "isotonic":
         ir = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
         ir.fit(feat, y.astype(np.float64))
-        return lambda x: np.clip(ir.transform(np.asarray(x, dtype=np.float64)), 0.0, 1.0)
+        return _IsotonicCal(ir)
     if method == "platt":
         lr = LogisticRegression(C=1e6, max_iter=200)
         lr.fit(feat.reshape(-1, 1), y)
-        return lambda x: lr.predict_proba(np.asarray(x, dtype=np.float64).reshape(-1, 1))[:, 1]
+        return _PlattCal(lr)
     raise ValueError(f"unknown method: {method!r}")
 
 
@@ -280,6 +300,28 @@ def fit_artifacts(
             print(f"           done in {time.time() - t_cg:.1f}s · q_hat by "
                   f"excluded fold: {stats}", flush=True)
         del long_per_fold
+    return art
+
+
+# ---------------------------------------------------------------------------
+# Persistence — decouples fitting (needs all 14 CGs' fold OOF parquets) from
+# applying (needs only the artifacts), so a scoped single-split run doesn't
+# have to touch the fold parquets at all.
+# ---------------------------------------------------------------------------
+
+def save_artifacts(art: CalibrationArtifacts, path: Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(art, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"[cg_calibration] saved {path}")
+
+
+def load_artifacts(path: Path) -> CalibrationArtifacts:
+    with open(path, "rb") as f:
+        art = pickle.load(f)
+    print(f"[cg_calibration] loaded {path} "
+          f"({len(art.score_calibrators)} CGs, method={art.method!r})")
     return art
 
 
